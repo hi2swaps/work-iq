@@ -1,20 +1,31 @@
 # search_paths
 
-Discover available WorkIQ API paths by regex. Use as the first step before entity tools when the path is unknown.
+Discover available WorkIQ API and provider-backed paths. Use as the first step
+before entity tools when the path is unknown and before every SharePoint
+provider action.
 
 ## Parameters
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `filter` | string | Yes | Regex pattern (e.g., `messages`, `.*calendar.*`). Empty or missing filter is rejected by the current server — pass `.*` to enumerate everything. |
+| `query` | string | Yes | Natural-language intent or path prefix, such as `reply to email`, `SharePoint move files`, or `/sharepoint`. |
 
-> **⚠️ One catalog only.** `search_paths` enumerates the single WorkIQ path catalog (Microsoft Graph paths). There is no `backend` / `source` / `provider` parameter — do not pass one, do not fabricate one from general knowledge. If the user asks about SharePoint REST, Dataverse, or any other API surface, say WorkIQ surfaces Graph paths through `search_paths` and report that the other surface is not available here.
+> **⚠️ One catalog only.** `search_paths` enumerates one WorkIQ catalog that
+> contains Graph-backed entity paths and provider-backed paths such as
+> `/sharepoint/*` and `/businessapps/*`. There is no `backend`, `source`, or
+> `provider` argument. Select the provider route from the returned path and
+> description instead of trying to choose a backend in the tool input.
 
 ## Workflow
 
-1. `search_paths` with a broad filter to find candidate paths
+1. `search_paths` with a focused intent or path prefix to find candidate paths
 2. `get_schema` on the chosen path
 3. `fetch` or the appropriate write tool (`create_entity` / `update_entity` / `delete_entity` / `do_action` / `call_function`)
+
+For a returned `/sharepoint/*` operation, use `get_schema` with
+`operationType: "action"` and invoke it with `do_action`. If the schema requires
+`siteKey`, resolve it through `/sharepoint/get_site_key` and pass it through
+unchanged.
 
 If the user asks to discover paths AND read or mutate, continue to the mutation tool after picking the path — discovery alone is incomplete.
 
@@ -24,8 +35,18 @@ Never answer API/path questions from general Graph knowledge, local SQL, filesys
 
 ### Find all message-related paths
 ```json
-{ "filter": "messages" }
+{ "query": "messages" }
 ```
+
+### Find SharePoint provider actions
+
+```json
+{ "query": "/sharepoint" }
+```
+
+For a concrete request, prefer the exact intent over broad enumeration, for
+example `SharePoint move files between libraries` or `SharePoint create list
+items`. Use only paths returned by that call.
 
 When the user asks what paths are available, enumerate every confirmed path
 family and operation returned by that `search_paths` call rather than selecting
@@ -36,20 +57,20 @@ result, but do not omit less common confirmed variants.
 
 ### Find calendar paths
 ```json
-{ "filter": ".*calendar.*" }
+{ "query": "calendar events" }
 ```
 
 ### Enumerate every path
 ```json
-{ "filter": ".*" }
+{ "query": "all available paths" }
 ```
 
 ### Find Planner paths
 ```json
-{ "filter": "planner" }
+{ "query": "planner" }
 ```
 
 ### Find OneDrive/files paths
 ```json
-{ "filter": "drive" }
+{ "query": "drive" }
 ```
