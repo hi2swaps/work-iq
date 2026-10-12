@@ -8,7 +8,7 @@ provider action.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `query` | string | Yes | Natural-language intent or path prefix, such as `reply to email`, `SharePoint move files`, or `/sharepoint`. |
+| `filter` | string | Yes | Regex or path prefix, such as `messages`, `.*calendar.*`, or `/sharepoint`. Empty or missing filters are rejected. |
 
 > **⚠️ One catalog only.** `search_paths` enumerates one WorkIQ catalog that
 > contains Graph-backed entity paths and provider-backed paths such as
@@ -18,7 +18,7 @@ provider action.
 
 ## Workflow
 
-1. `search_paths` with a focused intent or path prefix to find candidate paths
+1. `search_paths` with a focused filter or path prefix to find candidate paths
 2. `get_schema` on the chosen path
 3. `fetch` or the appropriate write tool (`create_entity` / `update_entity` / `delete_entity` / `do_action` / `call_function`)
 
@@ -35,13 +35,13 @@ Never answer API/path questions from general Graph knowledge, local SQL, filesys
 
 ### Find all message-related paths
 ```json
-{ "query": "messages" }
+{ "filter": "messages" }
 ```
 
 ### Find SharePoint provider actions
 
 ```json
-{ "query": "/sharepoint" }
+{ "filter": "/sharepoint" }
 ```
 
 For a concrete request, prefer the exact intent over broad enumeration, for
@@ -57,20 +57,20 @@ result, but do not omit less common confirmed variants.
 
 ### Find calendar paths
 ```json
-{ "query": "calendar events" }
+{ "filter": ".*calendar.*" }
 ```
 
 ### Enumerate every path
 ```json
-{ "query": "all available paths" }
+{ "filter": ".*" }
 ```
 
 ### Find Planner paths
 ```json
-{ "query": "planner" }
+{ "filter": "planner" }
 ```
 
 ### Find OneDrive/files paths
 ```json
-{ "query": "drive" }
+{ "filter": "drive" }
 ```

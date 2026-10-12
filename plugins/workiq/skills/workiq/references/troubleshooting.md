@@ -50,13 +50,13 @@ See the **URL Format Rules** section of `SKILL.md` for full examples.
 
 **Symptom:** `search_paths` returns a tool input validation error, or silently ignores extra arguments like `backend: "sharepoint-rest"` / `provider: "dataverse"`.
 
-**Cause:** `search_paths` accepts `query` (natural language or a path prefix)
-and optional `agentId`. There is no `backend` parameter and no equivalent.
-WorkIQ exposes Graph-backed and provider-backed routes in one catalog.
+**Cause:** `search_paths` accepts `filter` (regex or a path prefix) and optional
+`agentId`. There is no `backend` parameter and no equivalent. WorkIQ exposes
+Graph-backed and provider-backed routes in one catalog.
 
-**Fix:** Drop the extra argument and retry with `query` only. For SharePoint,
-query the exact intent or `/sharepoint`, then use a returned provider-backed
-path. For Business Applications, use `/businessapps/me` or a focused query.
+**Fix:** Drop the extra argument and retry with `filter` only. For SharePoint,
+filter on the exact intent or `/sharepoint`, then use a returned provider-backed
+path. For Business Applications, use `/businessapps/me` or a focused filter.
 Do not invent a tool variant or alternate backend.
 
 ## `fetch_blob` returns "tool does not exist"

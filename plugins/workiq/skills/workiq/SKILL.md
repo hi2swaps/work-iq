@@ -554,7 +554,7 @@ body, not the resource returned after the action succeeds.
 
 | Tool | Purpose | Key Parameters |
 |------|---------|----------------|
-| `search_paths` | Discover available API and provider paths | `query` (natural language or path prefix, **required**) |
+| `search_paths` | Discover available API and provider paths | `filter` (regex, **required**) |
 | `get_schema` | Inspect an operation schema: fetch entity/response shape, or create/update/action request body | `path`, `operationType` (`fetch`/`create`/`update`/`action`), `format` |
 | `fetch` | Fetch entities by path (GET) | `entityUrls[]` — supports OData (`$filter`, `$select`, `$top`) |
 | `call_function` | Call named OData functions — GET-shaped, side-effect-free, parenthesised inline params (e.g. `delta`, `reminderView`) | `functionUrl` with inline function params |
