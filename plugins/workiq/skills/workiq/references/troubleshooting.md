@@ -48,16 +48,20 @@ See the **URL Format Rules** section of `SKILL.md` for full examples.
 
 ## `search_paths` rejects a `backend` / `source` / `provider` argument
 
-**Symptom:** `search_paths` returns a tool input validation error, or silently ignores extra arguments like `backend: "sharepoint-rest"` / `provider: "dataverse"`.
+**Symptom:** `search_paths` returns a tool input validation error, or silently ignores extra arguments such as
+`backend`, `source`, or `provider`.
 
-**Cause:** `search_paths` accepts `filter` (regex or a path prefix) and optional
-`agentId`. There is no `backend` parameter and no equivalent. WorkIQ exposes
-Graph-backed and provider-backed routes in one catalog.
+**Cause:** `search_paths` exposes exactly one required search input in the current tool schema: legacy `filter` or
+natural-language `query`. It does not accept a caller-selected catalog argument. WorkIQ searches the enabled catalogs
+and providers automatically.
 
-**Fix:** Drop the extra argument and retry with `filter` only. For SharePoint,
-filter on the exact intent or `/sharepoint`, then use a returned provider-backed
-path. For Business Applications, use `/businessapps/me` or a focused filter.
-Do not invent a tool variant or alternate backend.
+**Fix:** Drop the extra argument, inspect `inputSchema.required`, and retry with exactly the required `filter` or
+`query` parameter. Do not send both and do not invent a tool variant or alternate backend. If no path is returned,
+report that WorkIQ did not confirm an enabled path for the request.
+
+For SharePoint, select a returned `/sharepoint/*` path matching the requested
+scope and use its advertised operation. Do not send natural-language SharePoint
+intent as a legacy regex.
 
 ## `fetch_blob` returns "tool does not exist"
 
@@ -73,12 +77,14 @@ Do not invent a tool variant or alternate backend.
 
 **Cause:** `upload_blob` is documented for future reference but is **not released in the current WorkIQ MCP surface**.
 
-**Fix:** For SharePoint, use `search_paths` to discover
-`/sharepoint/getUploadFileDetails`, inspect its action schema, invoke it with
-`do_action`, and follow the returned transfer instructions. For personal
-OneDrive, do not retry or invent another upload tool; return the destination
-folder's `webUrl` when useful and report that direct raw-byte upload is not
-released.
+**Fix:** Do not retry or invent another direct upload tool. A separately
+supported SharePoint/OneDrive prepared transfer requires an available client,
+an advertised `getUploadFileDetails` operation and schema, and a converted
+WorkIQ ticket. Apply the
+[file-transfer boundary](sharepoint-work-iq.md#file-transfer-boundary)
+before preparation. Otherwise return the destination folder's `webUrl` when
+useful and explain the missing prerequisite. Never switch tools after an
+authentication, consent, access, or policy denial.
 
 ## `ask` is slow or appears to hang
 

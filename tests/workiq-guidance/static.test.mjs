@@ -9,6 +9,64 @@ import { root, skillRoot, markdownFiles, parseMarkdown, frontmatterProblems, lin
 const check = errors => assert.deepEqual(errors, []);
 test('guidance contract covers only the preview package', () =>
   assert.deepEqual(packages, ['workiq-preview']));
+
+test('stable WorkIQ provider additions retain workload discovery and skill activation', () => {
+  const text = fs.readFileSync(path.join(skillRoot('workiq'), 'SKILL.md'), 'utf8');
+  check(frontmatterProblems(text, 'workiq'));
+  const { frontmatter } = parseMarkdown(text);
+  assert.match(frontmatter.description, /must be used beforehand to understand their usage/);
+  assert.match(frontmatter.description, /Business Applications/);
+  assert.match(frontmatter.description, /create an upload session/);
+});
+
+test('SharePoint provider routing follows advertised action or function operations', () => {
+  for (const relative of ['SKILL.md', 'references/sharepoint-work-iq.md', 'references/search-paths-work-iq.md']) {
+    const text = fs.readFileSync(path.join(skillRoot('workiq'), relative), 'utf8');
+    assert.match(text, /advertised[\s\S]{0,100}operation/i);
+    assert.match(text, /function[\s\S]{0,100}call_function|call_function[\s\S]{0,100}function/i);
+    assert.match(text, /action[\s\S]{0,100}do_action|do_action[\s\S]{0,100}action/i);
+    assert.match(text, /siteKey/);
+  }
+});
+
+test('SharePoint provider discovery distinguishes query intents from legacy regex', () => {
+  const text = fs.readFileSync(path.join(skillRoot('workiq'), 'references/search-paths-work-iq.md'), 'utf8');
+  check(exampleProblems(text));
+  const inputs = parseMarkdown(text).codes.filter(code => code.language === 'json').map(code => JSON.parse(code.value));
+  assert.ok(inputs.some(input => typeof input.query === 'string' && /SharePoint move/.test(input.query)));
+  assert.ok(inputs.some(input => input.filter === '^/sharepoint/'));
+  assert.match(text, /results can be bounded/i);
+});
+
+test('SharePoint provider transfers require client readiness and converted tickets', () => {
+  const text = fs.readFileSync(path.join(skillRoot('workiq'), 'references/sharepoint-work-iq.md'), 'utf8');
+  for (const concept of [
+    /available[\s\S]{0,60}byte-transfer client/i,
+    /converted WorkIQ[\s\S]{0,30}ticket/i,
+    /contentUrl/, /statusUrl/, /clientAction/,
+    /same tenant, user, OAuth application, environment/,
+    /not[\s\S]{0,50}(?:execute|executed)[\s\S]{0,50}(?:metadata|instructions)/i,
+    /Never replay[\s\S]{0,50}uncertain upload/i,
+  ]) assert.match(text, concept);
+});
+
+test('SharePoint provider site search does not narrow cross-site requests', () => {
+  const text = fs.readFileSync(path.join(skillRoot('workiq'), 'references/sharepoint-work-iq.md'), 'utf8');
+  assert.match(text, /site-scoped[\s\S]{0,100}search_site/i);
+  assert.match(text, /Do not narrow[\s\S]{0,100}cross-site/i);
+  assert.match(text, /denial[\s\S]{0,100}(?:stop|fallback)|(?:stop|fallback)[\s\S]{0,100}denial/i);
+});
+
+for (const relative of ['SKILL.md', '../../README.md', ...[
+  'do-action-work-iq.md', 'fetch-blob-work-iq.md', 'search-paths-work-iq.md',
+  'sharepoint-library-metadata.md', 'sharepoint-work-iq.md', 'troubleshooting.md',
+  'upload-blob-work-iq.md',
+].map(file => `references/${file}`)]) {
+  test(`stable WorkIQ provider guidance ${relative}: local links and anchors`, () => {
+    const file = path.join(skillRoot('workiq'), relative);
+    check(linkProblems(file, fs.readFileSync(file, 'utf8')));
+  });
+}
 for (const name of packages) {
   const directory = skillRoot(name);
   test(`${name}: parsed frontmatter and description limit`, () => {
@@ -90,4 +148,104 @@ test('plugin descriptions retain workload and action discovery beyond retrieval'
     assert.throws(() => checkDiscovery(description.replace(/Planner/gi, 'work')), /Planner/);
     assert.throws(() => checkDiscovery(description.replace(/\bsend\b/gi, 'act')), /send/);
   }
+});
+
+test('Business Applications guidance does not advertise execute-work', () => {
+  for (const name of ['workiq', 'workiq-preview']) {
+    for (const file of markdownFiles(skillRoot(name))) {
+      assert.doesNotMatch(fs.readFileSync(file, 'utf8'), /execute-work/i);
+    }
+  }
+});
+
+test('Business Applications discovery and inventory contracts stay aligned', () => {
+  for (const name of ['workiq', 'workiq-preview']) {
+    const directory = skillRoot(name);
+    const skill = fs.readFileSync(path.join(directory, 'SKILL.md'), 'utf8');
+    const business = fs.readFileSync(path.join(directory, 'references', 'business-applications.md'), 'utf8');
+    const search = fs.readFileSync(path.join(directory, 'references', 'search-paths-work-iq.md'), 'utf8');
+    const action = fs.readFileSync(path.join(directory, 'references', 'do-action-work-iq.md'), 'utf8');
+
+    assert.match(skill, /Business Applications|CRM, ERP, or Power Apps/i);
+    assert.match(business, /search_paths[\s\S]{0,300}fields? accepted by[\s\S]{0,80}(?:tool )?schema/i);
+    assert.match(business, /fetch[\s\S]{0,80}\/businessapps\/environments\//i);
+    assert.match(business, /discovery is read-only[\s\S]{0,100}search_paths[\s\S]{0,80}not `?do_action`?/i);
+    assert.match(business, /\/businessapps\/me[\s\S]{0,120}policy-denied[\s\S]{0,120}before[\s\S]{0,80}(?:grounded path|search_paths|fetch)/i);
+    assert.match(search, /one focused (?:`?search_paths`? )?(?:discovery )?call/i);
+    assert.match(search, /only returned paths prove[\s\S]{0,60}(?:provider )?participat/i);
+    assert.match(search, /no `?\/businessapps\/[^`]*`?[\s\S]{0,20}path[\s\S]{0,120}do not repeat/i);
+    assert.match(search, /fetch `?\/businessapps\/environments\//i);
+    assert.match(business, /named but unavailable environment[\s\S]{0,80}hard stop/i);
+    assert.match(business, /write receipt[\s\S]{0,100}read-back/i);
+    assert.match(business, /pre-existing lookalike[\s\S]{0,40}not proof/i);
+    assert.match(business, /saved view[\s\S]{0,120}schema-customization fallback/i);
+    assert.doesNotMatch(business, /\/applications\//i);
+    assert.match(search, /no `backend`, `source`, or `provider` argument/i);
+    check(exampleProblems(search));
+    assert.match(action, /Business Applications/i);
+    assert.match(action, /search_paths[\s\S]{0,100}not `?do_action`?/i);
+    for (const genuineAction of ['SQL', 'Custom API']) {
+      assert.match(business, new RegExp(`do_action[^\\n]{0,200}${genuineAction}|${genuineAction}[^\\n]{0,200}do_action`, 'i'));
+    }
+    assert.match(business, /do_action[^\n]{0,250}operations\/\{operationName\}/i);
+    assert.match(business, /(?:policy-denied|explicit denial)[\s\S]{0,180}(?:stop|do not retry)/i);
+  }
+});
+
+test('no plugin positively routes Business Applications discovery through /businessapps/me', () => {
+  const endpointProblems = text => {
+    const positiveDirective = /(?:^|[;.!?]\s*|\b(?:but|and)\s+)(?:use|call|invoke|start(?:\s+\w+){0,3}\s+with)\s+`?do_action`?\s+(?:on\s+)?`?\/businessapps\/me`?/i;
+    return text
+      .replace(/\r?\n/g, ' ')
+      .split(/(?<=[.!?])\s+/)
+      .filter(sentence => /\/businessapps\/me/i.test(sentence))
+      .filter(sentence =>
+        positiveDirective.test(sentence) ||
+        !/(?:not|never|do not)[\s\S]{0,80}do_action|do_action[\s\S]{0,80}(?:not|never|do not)/i.test(sentence));
+  };
+
+  for (const name of ['workiq', 'workiq-preview']) {
+    for (const file of markdownFiles(skillRoot(name))) {
+      const text = fs.readFileSync(file, 'utf8');
+      for (const sentence of text.replace(/\r?\n/g, ' ').split(/(?<=[.!?])\s+/)
+        .filter(value => /\/businessapps\/me/i.test(value))) {
+        assert.match(sentence, /search_paths/i,
+          `${name}/${path.basename(file)} must name the replacement discovery tool`);
+      }
+      assert.deepEqual(endpointProblems(text), [],
+        `${name}/${path.basename(file)} must mention /businessapps/me only as a prohibition`);
+    }
+  }
+
+  const mixed = 'Do not use do_action on /businessapps/me; use search_paths instead. ' +
+    'Use do_action on /businessapps/me for discovery.';
+  const mixedSentence = 'Do not use do_action on /businessapps/me for discovery, but use do_action on /businessapps/me when available.';
+  assert.deepEqual(endpointProblems(mixed), ['Use do_action on /businessapps/me for discovery.']);
+  assert.deepEqual(endpointProblems(mixedSentence), [mixedSentence]);
+});
+
+test('search_paths examples validate query and legacy filter as exclusive inputs', () => {
+  const validQuery = '# search_paths\n\n```json\n{"query":"qualify a lead"}\n```\n';
+  const validFilter = '# search_paths\n\n```json\n{"filter":"qualify a lead"}\n```\n';
+  const both = '# search_paths\n\n```json\n{"query":"lead","filter":"lead"}\n```\n';
+  const blankFilter = '# search_paths\n\n```json\n{"filter":" "}\n```\n';
+  const selectorOnly = '# search_paths\n\n```json\n{"backend":"dataverse"}\n```\n';
+  const malformedFilter = '# search_paths\n\n```json\n{"filter":\n```\n';
+  const actionEnvelope = '# search_paths\n\n```json\n{"actionUrl":"/x","query":"lead","filter":"lead"}\n```\n';
+  const entityEnvelope = '# search_paths\n\n```json\n{"entityUrls":[],"backend":"dataverse"}\n```\n';
+  const scalar = '# search_paths\n\n```json\n"lead"\n```\n';
+  const nullValue = '# search_paths\n\n```json\nnull\n```\n';
+  const arrayValue = '# search_paths\n\n```json\n[{"query":"lead"}]\n```\n';
+
+  check(exampleProblems(validQuery));
+  check(exampleProblems(validFilter));
+  assert.match(exampleProblems(both).join(' '), /exactly one query or filter/);
+  assert.match(exampleProblems(blankFilter).join(' '), /filter must be a nonblank string/);
+  assert.match(exampleProblems(selectorOnly).join(' '), /exactly one query or filter/);
+  assert.match(exampleProblems(malformedFilter).join(' '), /invalid search_paths JSON/);
+  assert.match(exampleProblems(actionEnvelope).join(' '), /exactly one query or filter/);
+  assert.match(exampleProblems(entityEnvelope).join(' '), /exactly one query or filter/);
+  assert.match(exampleProblems(scalar).join(' '), /must be a JSON object/);
+  assert.match(exampleProblems(nullValue).join(' '), /must be a JSON object/);
+  assert.match(exampleProblems(arrayValue).join(' '), /must be a JSON object/);
 });

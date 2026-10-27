@@ -71,7 +71,7 @@ plugins/<plugin-name>/
 - **workiq** — Full WorkIQ tool surface for Microsoft 365 (read + write). Bundles:
   - `workiq` skill — Guides usage of `ask` for semantic questions plus the entity tools for fast, structured M365 and Business Applications reads and writes
   - Hosted MCP server (`workiq`) with tools: `ask_work_iq`, `fetch_work_iq`, `fetch_blob_work_iq`, `get_schema_work_iq`, `search_paths_work_iq`, `create_entity_work_iq`, `update_entity_work_iq`, `delete_entity_work_iq`, `do_action_work_iq`, `call_function_work_iq`, `get_debug_link`
-  - SharePoint IQ provider operations are exposed through the same WorkIQ path catalog under `/sharepoint/*`; SharePoint actions must use `search_paths` → `get_schema` → `do_action`, resolving `/sharepoint/get_site_key` when required.
+  - SharePoint provider operations use the same WorkIQ catalog under `/sharepoint/*`. Honor the connected `query`/legacy `filter` schema and advertised action/function projection; inspect schemas and resolve opaque `siteKey` values only when required. Preserve Graph-backed reads and cross-site search scope. Prepared transfers require an available supported client and converted WorkIQ tickets, not native URLs or executable metadata instructions. Stable provider-routing regressions run with the existing static suite without imposing preview semantic policy on stable WorkIQ.
   - SharePoint library-metadata requests dispatch to `references/sharepoint-library-metadata.md`; read it before the workflow. Detailed procedures and safeguards live there rather than being duplicated in `SKILL.md`.
 
 - **workiq-preview** — Preview build with agent-host-neutral, retrieve-first guidance (read + write). Bundles:
@@ -82,7 +82,7 @@ plugins/<plugin-name>/
 
 - **microsoft-365-agents-toolkit** — Toolkit for building M365 Copilot declarative agents. Bundles:
   - `install-atk` skill — Install or update the M365 Agents Toolkit CLI and VS Code extension
-  - `declarative-agent-developer` skill — DA schema and capability guidance, with project lifecycle operations executed through the wiqd CLI
+  - `declarative-agent-developer` skill — Entry point that delegates complete Declarative Agent requests to the separately installed WIQD plugin's `wiqd` skill
   - `teams-app-developer` skill — Build, test, and deploy code-based Teams apps: bots, CEA, tabs, message extensions, Agents Playground, Azure provision/deploy, and Slack-to-Teams migration
   - `ui-widget-developer` skill — Build MCP servers with OpenAI Apps SDK widget rendering for Copilot Chat
   - `m365-agent-evaluator` skill — Generate, run, and analyze evaluation suites for M365 Copilot declarative agents

@@ -30,6 +30,11 @@ POST a WorkIQ action — a named operation that performs a task (send mail, copy
 
 Vs. `create_entity`: use `do_action` for verbs (send, copy, move, accept, reply, getSchedule); use `create_entity` to create a new stored resource. Function-shaped names that still take a JSON body (`getSchedule`, `findMeetingTimes`) are actions — POST them here.
 
+For Business Applications, use `search_paths`, not `do_action` on
+`/businessapps/me`, for semantic discovery. Use `do_action` only after discovery
+identifies a genuine action such as an environment SQL query, Custom API, app
+operation, or in-app MCP tool.
+
 ## Examples
 
 ### Send an email immediately
@@ -196,9 +201,10 @@ runtime; never reuse a literal date from this example.
 
 ### Search documents across SharePoint team sites
 
-First call `search_paths` for the exact SharePoint search intent. If it returns
-`/sharepoint/search_site`, inspect that action's schema, resolve `siteKey` when
-required, and invoke it with `do_action`.
+For a site-scoped request, discover a matching `/sharepoint/search_site` action,
+inspect its schema, resolve `siteKey` when required, and invoke it with
+`do_action`. Do not narrow a cross-site request to that site-scoped operation
+merely because it was returned.
 
 Only for a genuinely cross-site search that is not covered by a returned
 provider path, use Microsoft Search for a bounded document query. This response can
@@ -243,6 +249,9 @@ user explicitly asks for a page. Prefer typical document extensions such as
 `.docx`, `.pptx`, `.xlsx`, `.pdf`, and `.txt`.
 
 See `references/sharepoint-work-iq.md` for the complete provider routing rule.
+The documented Microsoft Search payload is a known action contract; it does not
+require an additional schema call. Neither route is a fallback after an access
+or policy denial.
 
 ### Set my Teams presence to Busy
 ```json

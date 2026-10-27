@@ -2,12 +2,15 @@
 
 > ⚠️ **Not released yet.** `upload_blob` is documented here for future
 > reference but is **not part of the current WorkIQ MCP tool surface**.
-> SharePoint uploads use the provider-backed
-> `/sharepoint/getUploadFileDetails` action and its returned transfer
-> instructions; do not treat the missing direct tool as proof that SharePoint
-> upload is unsupported.
+> Provider-backed SharePoint/OneDrive uploads require an available supported
+> byte-transfer client and a converted WorkIQ ticket from
+> `/sharepoint/getUploadFileDetails`. Follow the
+> [file-transfer boundary](sharepoint-work-iq.md#file-transfer-boundary);
+> preparation alone is not upload. Otherwise return the destination `webUrl`
+> when useful so the user can upload through the web UI.
 
-Upload a local file to a WorkIQ path via HTTP PUT. Use this to upload files to OneDrive or SharePoint.
+The examples below describe the unreleased direct tool, not a substitute for
+the prepared-ticket workflow.
 
 ## Parameters
 
@@ -21,9 +24,9 @@ Upload a local file to a WorkIQ path via HTTP PUT. Use this to upload files to O
 - Uploading a file to OneDrive
 - Replacing the content of an existing file
 
-For a SharePoint document library, use `search_paths` to discover
-`/sharepoint/getUploadFileDetails`, call `get_schema` for its action body, and
-invoke it with `do_action`.
+For an approved SharePoint/OneDrive prepared transfer, discover the provider's
+`/sharepoint/getUploadFileDetails` contract and require the file-transfer
+boundary above before preparation. This guidance does not install a client.
 
 ## Path Conventions
 

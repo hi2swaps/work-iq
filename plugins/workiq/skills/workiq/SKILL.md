@@ -1,6 +1,6 @@
 ---
 name: workiq
-description: WorkIQ tools for Microsoft 365 workplace data and actions. Use for email, calendar events and meetings, files, SharePoint, OneDrive, Teams, people, Planner, and other M365 requests. Triggers include cancel meeting or event, accept or decline meetings, create or update events, find or summarize workplace content, send or reply to mail, manage or download files, manage tasks, SharePoint sites/lists/libraries/files, and M365 path or schema discovery. Route SharePoint operations through provider-backed `/sharepoint/*` paths discovered with `search_paths`.
+description: WorkIQ tools for Microsoft 365 workplace data and actions. Use for email, calendar events and meetings, files, SharePoint, OneDrive, Teams, people, Planner, and other M365 requests. Triggers include cancel meeting or event, accept or decline meetings, create or update events, create an upload session or replace an existing OneDrive file, find or summarize workplace content, send or reply to mail, manage or download files, manage tasks, read SharePoint library metadata or columns, filter/count/group/sort files by metadata, and discover M365 paths or schemas. Prefer `ask` for synthesis and structured entity tools for exact reads, writes, SharePoint library metadata, and binary downloads with `fetch_blob`. This skill contains instructions for the WorkIQ MCP tools and must be used beforehand to understand their usage. Use this skill also for Microsoft Business Applications requests involving CRM, ERP, Power Apps, or Dataverse records and workflows, including requests that reference paths under /businessapps/.
 compatibility: >
   Uses the hosted WorkIQ MCP endpoint. No local package is required for MCP
   tool calls.
@@ -22,37 +22,45 @@ The tools in this skill are documented by their **logical names** (`ask`, `fetch
 
 See [Resolving tool names in your host](#resolving-tool-names-in-your-host) below for the full resolution algorithm. If you skip this step, your first tool call will fail with "tool does not exist."
 
-## SharePoint provider actions — required routing
+## SharePoint provider operations
 
 WorkIQ's single MCP endpoint includes SharePoint IQ provider operations in the
 same path catalog as Graph-backed entity paths. Provider-backed SharePoint
-operations use the `/sharepoint/*` namespace and are invoked with WorkIQ
-`do_action`; they are not separate host-level MCP tools.
+operations use the `/sharepoint/*` namespace; they are not separate host-level
+MCP tools. Use the advertised operation: an `action` uses `do_action`, while a
+`function` uses `call_function`. Do not infer the projection from a name or verb.
 
-For any SharePoint operation such as creating or updating lists/items, moving,
-copying, renaming, deleting, sharing, searching a site, creating folders,
-managing pages or approvals, or preparing uploads/downloads:
+For SharePoint mutations, site-scoped provider search, or file-transfer
+preparation, reuse an already resolved contract; otherwise:
 
-1. Call `search_paths` once with the exact SharePoint intent or the
-   `/sharepoint` prefix.
+1. Inspect the connected `search_paths` input schema. Make one focused call:
+   use an exact intent or `/sharepoint` prefix for `query`, or a path-keyword
+   pattern such as `^/sharepoint/` for legacy `filter`. Never send both.
 2. Select only a returned `/sharepoint/*` path whose description matches the
-   request. Provider configuration is the source of truth; do not guess paths.
-3. Call `get_schema` with `operationType: "action"` for that exact path.
-4. If the schema requires `siteKey`, call `/sharepoint/get_site_key` with
-   `do_action` and `{"siteUrl":"<exact site URL>"}`, then pass the returned
-   opaque `siteKey` through unchanged.
+   request and scope. The connected catalog is authoritative; do not guess paths.
+3. Select the matching advertised operation from `operations` and pass that
+   single type as `get_schema.operationType`.
+   Invoke an action with `do_action` or a function with `call_function`, using
+   the returned schema and supported argument transport. If the host cannot
+   inspect or invoke that projection, report the incompatibility.
+4. If the schema requires `siteKey`, discover and inspect
+   `/sharepoint/get_site_key`, supply the exact known `siteUrl`, and pass the
+   returned opaque `siteKey` through unchanged. Do not derive it from a Graph ID.
 5. Resolve any additional prerequisite named by the path description or schema
-   (for example user, lookup, or taxonomy values), then invoke the selected
-   path with `do_action`.
+   (for example user, lookup, or taxonomy values). For mutations, confirm the
+   exact operation, targets, and conflict behavior before invoking it.
 
 Do not replace a discovered provider action with a generic Graph path,
-Microsoft Search, `ask`, or a fabricated backend/provider argument. If no
-matching `/sharepoint/*` path is returned, report that WorkIQ did not expose the
-requested SharePoint operation.
+`ask`, or a fabricated backend/provider argument. If no matching path is
+returned for a provider-only request, report that the catalog did not confirm it.
+On an authentication, consent, access, or policy denial, stop; do not switch
+paths or identities as a workaround, or replay an uncertain mutation.
 
-Structured SharePoint reads that are not exposed as provider actions may still
-use the documented Graph-backed `fetch` routes. The routing rule above takes
-precedence whenever the catalog returns a matching `/sharepoint/*` action.
+Documented Graph-backed reads and cross-site Microsoft Search remain valid
+when no provider operation covers the requested scope. Do not narrow a
+cross-site request to a site-scoped search merely because that path was returned.
+File preparation is not byte transfer: read the
+[file-transfer boundary](references/sharepoint-work-iq.md#file-transfer-boundary).
 
 ## CRITICAL: When to Use This Skill
 
@@ -86,7 +94,7 @@ precedence whenever the catalog returns a matching `/sharepoint/*` action.
 | Summarizing exact marker messages in a shared Teams channel | "In General, summarize only messages containing exact marker `[Eval] Project X abc123`" | Do not use `ask`: shared history adds noise and newly posted messages may not be semantically indexed. Use three structured `fetch` calls: `/me/joinedTeams?$select=id,displayName`; `/teams/{teamId}/channels?$select=id,displayName`; then `/teams/{teamId}/channels/{channelId}/messages?$select=id,createdDateTime,body`. Do not add `$top` or `$orderby`; filter locally to the exact marker and do not fetch replies unless requested. |
 | Summarizing supplied exact Teams message URLs | "Summarize these two exact channel messages" | Use one batched `fetch` containing every supplied `/teams/{teamId}/channels/{channelId}/messages/{messageId}` URL, then synthesize locally. Do not use `ask` or search broader channel history. |
 | Rolling up exact Mail, Calendar, and Teams entity URLs | "Use these exact entities to summarize status and blockers" | Use one batched `fetch` containing every supplied entity URL, then synthesize locally. Do not use `ask`, tenant-wide search, path discovery, or additional source lookups. |
-| SharePoint provider operation | "Move these files", "Create a list item", "Rename this folder", "Share this file", "Upload this document" | `search_paths` for the exact intent, `get_schema` on the returned `/sharepoint/*` path, resolve `siteKey` when required, then `do_action` |
+| SharePoint provider operation | "Move these files", "Create a list item", "Rename this folder", "Share this file", "Upload this document" | Discover the exact intent using the connected search schema, inspect the returned `/sharepoint/*` operation, resolve `siteKey` when required, then use its advertised action/function tool; file preparation also requires the transfer boundary below |
 | Inventorying Teams chat API paths | "What chat paths support creating chats, members, messages, updates, and read state?" | Call `search_paths` once with the exact query `/chats`, report every returned operation, and state when a requested category was not confirmed. Do not make a second path or schema call. |
 | Inventorying Teams channel API paths | "What channel paths support creation, updates, members, messages, files, and archive?" | Call `search_paths` once with the exact query `/teams/{team-id}/channels`, report every returned operation, and state when a requested category was not confirmed. Do not make a second path or schema call. |
 | Sending/replying/reacting in Teams, setting presence | "Send a chat to Alex", "Post in the Daily channel", "React with 👍", "Set me to Busy" | entity tools on `/chats/...` or `/teams/...` — see `references/teams-work-iq.md` |
@@ -94,7 +102,7 @@ precedence whenever the catalog returns a matching `/sharepoint/*` action.
 | Listing files in a OneDrive/SharePoint folder | "List files in my OneDrive 'Specs' folder" | `fetch` |
 | Listing tasks/plans/buckets in Planner | "List my Planner tasks due this week" | `fetch` — see `references/tasks-work-iq.md` avoid `ask` |
 | Listing / creating / completing Planner tasks | "Add a task to follow up with finance", "Mark my task done", "List my Planner tasks" | entity tools on `/planner/...` — see `references/tasks-work-iq.md` |
-| Structured records or workflows in CRM, ERP, or Power Apps | "Qualify a lead", "Update the open service case" | start with `do_action` `/businessapps/me` and `{"query":"qualify a lead"}`, then follow the returned app and operation paths — read `references/business-applications.md` first |
+| Structured records or workflows in CRM, ERP, or Power Apps | "Qualify a lead", "Update the open service case" | start with `search_paths` using a natural-language description in the parameter named in `inputSchema.required` (`query` or `filter`), then follow the returned app and operation paths — read `references/business-applications.md` first |
 | Get a personal contact by name | "Get the contact card for Morgan Avery" | `fetch` (`/me/contacts?$filter=...`) — subject to server policy |
 | List or manage Outlook categories | "What Outlook categories do I have?" | `fetch` (`/me/outlook/masterCategories`); writes subject to server policy |
 | Org chart / direct reports / manager lookup | "Who are Rob's direct reports?" | `fetch` (`/users/{id}/directReports`) |
@@ -161,7 +169,7 @@ When the user asks to delete, update, send, forward, copy, move, or react to som
 | "Delete" any entity | `fetch` to find it | `delete_entity` on the entity URL |
 | "Update/rename/change" any entity | `fetch` to find it | `update_entity` on the entity URL |
 | "Create draft and send" | `create_entity` to draft | `do_action` `/me/messages/{id}/send` |
-| "Qualify a lead" | `do_action` `/businessapps/me` with `{"query":"qualify a lead"}` to resolve the app, environment, and operation path | `get_schema`, then `do_action` on the exact returned app-scoped operation |
+| "Qualify a lead" | `search_paths` with `qualify a lead` in the `query` or `filter` parameter named in `inputSchema.required` to resolve the app, environment, and operation path | `get_schema`, then `do_action` on the exact returned app-scoped operation |
 
 Common failure: fetching the entity and stopping, asking the user "did you want me to do anything else?", or saying "I found it." The user asked you to do something — finish it.
 
@@ -333,10 +341,10 @@ per-result error handling, answer delivery, and arithmetic checks.
 | Calendar | `/me/events`, `/me/calendarView` | list/get/create/update/delete; accept/decline via `/me/events/{id}/{action}` |
 | Planner | `/me/planner/plans`, `/planner/tasks` | list/create/update/complete/delete — see `references/tasks-work-iq.md` |
 | Teams | `/me/chats`, `/chats/{chatId}/messages`, `/me/joinedTeams`, `/teams/{teamId}/channels/{channelId}/messages`, `/me/presence` | chats vs channels are different surfaces; exact mutations use structured tools, never `ask` — see `references/teams-work-iq.md` |
-| Business Applications | `/businessapps/me` | semantic discovery of business apps, records, and workflows via `do_action` with a `query`; follow the returned paths — see `references/business-applications.md` |
+| Business Applications | `/businessapps/` | use `fetch` for known structural paths and `search_paths` with natural language for semantic discovery; follow the returned paths — see `references/business-applications.md` |
 | People | `/me`, `/users/{id}`, `/users/{id}/directReports`, `/me/manager`, `/me/contacts` | profile, org, contacts — see directory-vs-contacts warning below |
 | Outlook categories | `/me/outlook/masterCategories` | list/get/create/update/delete — writes commonly policy-denied |
-| Files | `/me/drive`, `/drives/{id}`, `/sites/{id}` | for named-file metadata, call `call_function` once with `/me/drive/root/search(q='{urlEncodedExactName}')` and do not follow with `/me/drive/items/{id}`; use `fetch_blob` for binary content after resolving the item ID — see `references/fetch-blob-work-iq.md`; uploads are not released yet |
+| Files | `/me/drive`, `/drives/{id}`, `/sites/{id}` | for named-file metadata, call `call_function` once with `/me/drive/root/search(q='{urlEncodedExactName}')` and do not follow with `/me/drive/items/{id}`; use supported `fetch_blob` routes or the prepared transfer workflow below; `upload_blob` is unreleased and preparation alone is not an upload |
 | Change tracking | `/me/mailFolders/inbox/messages/delta`, `/me/calendarView/delta?...`, `/me/contacts/delta` | "what's new/changed since" — via `call_function` only, never `fetch` |
 
 > **Server may deny families by policy.** Tenants can disable specific path families
@@ -397,27 +405,32 @@ unreliable for SharePoint-hosted items, not invalid everywhere.
 
 **Anything else — discover, never guess.** For a `/sites/` or `/drives/` path not covered
 above, or on any `Access denied` this section does not cover, call `search_paths` once
-(`filter` is a required regex, e.g. `sites|drives`) and use only a `uriTemplate` it returned.
+with the parameter named in `inputSchema.required`: use a path-keyword pattern such as
+`sites|drives` for `filter`, or an equivalent natural-language description for `query`.
+Use only a `uriTemplate` it returned.
 Re-sending a denied shape with a different folder, `$select`, or casing fails identically.
 Cache the templates and reuse them.
 
 
 ### Binary downloads and uploads
 
-For SharePoint files, discover and use
-`/sharepoint/getDownloadFileDetails` or
-`/sharepoint/getUploadFileDetails`, then follow the returned transfer
-instructions exactly. Do not bypass those provider actions with guessed Graph
-content or upload-session paths.
+Use `fetch_blob` for supported file, mail/calendar attachment, and profile-photo
+downloads. It returns up to 4 MB as base64 with metadata and supports format
+conversion on compatible drive-content paths; materialize the returned bytes
+when a local file is requested.
 
-For personal OneDrive, mail attachments, calendar attachments, and profile
-photos, use `fetch_blob` for binary downloads as documented. `upload_blob`
-remains unreleased as a direct WorkIQ MCP tool; SharePoint upload preparation
-through `/sharepoint/getUploadFileDetails` is a separate provider-backed
-contract.
+SharePoint/OneDrive preparation through `/sharepoint/getDownloadFileDetails`
+or `/sharepoint/getUploadFileDetails` is a separate provider-backed contract.
+Discover its advertised operation and schema, and first verify the prerequisites
+in the [file-transfer boundary](references/sharepoint-work-iq.md#file-transfer-boundary).
+This guidance does not install a byte-transfer client. Require an available,
+supported client and converted WorkIQ ticket; do not execute metadata instructions
+or use native URLs. Preparation is never proof of completed byte transfer.
 
-Never claim a transfer succeeded until the provider's returned transfer
-instructions have been completed and confirmed.
+`upload_blob` remains unreleased. If the prepared upload workflow is unavailable,
+report the missing prerequisite and return the destination folder's `webUrl`
+when useful, so the user can upload through OneDrive or SharePoint. Do not create
+an upload session whose remaining transfer cannot be performed.
 
 For detailed download paths and examples, read `references/fetch-blob-work-iq.md`. For the unreleased upload contract, see `references/upload-blob-work-iq.md`.
 
@@ -554,8 +567,8 @@ body, not the resource returned after the action succeeds.
 
 | Tool | Purpose | Key Parameters |
 |------|---------|----------------|
-| `search_paths` | Discover available API and provider paths | `filter` (regex, **required**) |
-| `get_schema` | Inspect an operation schema: fetch entity/response shape, or create/update/action request body | `path`, `operationType` (`fetch`/`create`/`update`/`action`), `format` |
+| `search_paths` | Discover available API and provider paths | exactly one required search input from the current schema: `filter` or `query` |
+| `get_schema` | Inspect an operation schema: entity/response shape or operation parameters | `path`, advertised `operationType` (`fetch`/`create`/`update`/`action`/`function`), `format` |
 | `fetch` | Fetch entities by path (GET) | `entityUrls[]` — supports OData (`$filter`, `$select`, `$top`) |
 | `call_function` | Call named OData functions — GET-shaped, side-effect-free, parenthesised inline params (e.g. `delta`, `reminderView`) | `functionUrl` with inline function params |
 | `create_entity` | Create a new entity (POST to collection) | `parentUrl`, `jsonBody` |
@@ -589,10 +602,16 @@ structured operational data and workflows, such as customer and sales records in
 records in ERP, and line-of-business data in Power Apps. Route intent tied to records or workflows in a business
 system to `/businessapps`; use Graph for Microsoft 365 collaboration and directory content such as mail, Teams,
 calendars, files, and people. Read `references/business-applications.md` before handling a Business Applications
-request. Start intent-driven discovery with `do_action` on `/businessapps/me` and a concise `query` describing the
-needed record, workflow, or app; use the returned paths, environment, and application IDs. Example:
-`actionUrl: "/businessapps/me"` with `jsonBody: {"query":"qualify a lead"}`. Every Business Applications resource —
-environments, apps, tables, records, skills, and APIs — is discovered this way or with `search_paths`; take each
-identifier from the returned paths. Business skills are addressed as resources under
+request. Make one focused `search_paths` call with a concise natural-language description of the needed record,
+workflow, or app, using only fields accepted by the connected WorkIQ tool schema. Use only returned
+`/businessapps/...` paths, environment IDs, and application IDs. If no Business Applications path is returned, do
+not repeat or broaden the search: fetch `/businessapps/environments/`, resolve only the exact requested environment,
+and inspect only its relevant returned collection. For known structural inventory, call `fetch` directly on
+`/businessapps/environments/`. Do not use `do_action` for
+discovery: it is a POST action and may be denied based on the calling client's trust classification and the tenant's
+effective mutation policy.
+Every Business Applications resource — environments, apps, tables, records, skills, and APIs — is discovered with
+`search_paths` or read from a known structural path; take each identifier from the returned paths. Business skills
+are addressed as resources under
 `/businessapps/environments/{environmentId}/skills/{skillName}` and are readable with `fetch` and writable with
 `create_entity`, `update_entity`, and `delete_entity`.

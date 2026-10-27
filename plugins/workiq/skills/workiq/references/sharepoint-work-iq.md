@@ -10,29 +10,36 @@ routes below over broad discovery, repeated `search_paths`, or `ask`.
 ## Provider-backed SharePoint operations
 
 WorkIQ's SharePoint IQ integration publishes provider operations under
-`/sharepoint/*` in the normal `search_paths` catalog. Use these actions for
+`/sharepoint/*` in the normal `search_paths` catalog. Use these operations for
 SharePoint mutations and provider-specific workflows instead of constructing
-Graph writes or treating SharePoint as a separate MCP server.
+Graph writes or treating SharePoint as a separate MCP server. Reuse an already
+resolved contract; otherwise follow the workflow below.
 
 Required workflow:
 
-1. Call `search_paths` with the exact SharePoint intent, or `/sharepoint` when
-   the user asks what SharePoint operations are available.
-2. Select a returned `/sharepoint/*` path by its description.
-3. Call `get_schema` with `operationType: "action"`.
-4. When the schema requires `siteKey`, call
-   `/sharepoint/get_site_key` through `do_action` with the exact site URL and
-   pass the returned opaque key through unchanged.
+1. Inspect the connected `search_paths` schema. Use the required `query` for
+   exact SharePoint intent or a path prefix; for legacy `filter`, use a
+   path-keyword or regex such as `^/sharepoint/`. Never send both parameters.
+2. Select a returned `/sharepoint/*` path matching the requested scope and
+   inspect its advertised `operations`.
+3. Use the advertised operation type for `get_schema`: an `action` uses
+   `do_action`, while a `function` uses `call_function`. Do not infer a projection
+   from its name or HTTP method. Report incompatible host support instead of
+   invoking a function as an action.
+4. When the schema requires `siteKey`, discover and inspect
+   `/sharepoint/get_site_key`, supply the exact known site URL, and pass the
+   returned opaque key through unchanged; do not construct it from a Graph ID.
 5. Resolve any prerequisite explicitly named by the schema or description,
-   then call the selected action with `do_action`.
+   then invoke the operation. For mutations, confirm exact targets and conflict
+   behavior first.
 
-The live provider catalog includes operations for list and item creation or
+Provider catalogs may include operations for list and item creation or
 updates, folders, move/copy/rename/delete, site search, permissions and
 sharing, pages, approvals, formatting, comments, shortcuts, and transfer
 preparation. This list can change; `search_paths` and `get_schema` are
 authoritative.
 
-Examples of currently exposed paths include:
+Examples you may encounter include:
 
 - `/sharepoint/get_site_key`
 - `/sharepoint/discover_sharepoint_lists`
@@ -55,7 +62,10 @@ Examples of currently exposed paths include:
 
 Do not pass `backend`, `provider`, or `source` to `search_paths`; provider
 routing comes from the returned path. If the catalog does not return a matching
-operation, report that limitation instead of guessing a path.
+operation, report that limitation instead of guessing a path. Prefix search
+results may be bounded rather than exhaustive. On authentication, consent,
+access, or policy denial, stop without switching identities, endpoints, or tools
+as a fallback. Never replay an uncertain mutation.
 
 ## First accessible SharePoint site
 
@@ -107,6 +117,10 @@ For site-scoped SharePoint search, prefer the provider-backed
 `/sharepoint/search_site` action discovered through `search_paths`. Use its live
 schema and resolve `siteKey` when required.
 
+Do not narrow a cross-site request to a single-site search merely because
+`/sharepoint/search_site` is returned. The operation must cover the requested
+scope; otherwise keep the documented cross-site Microsoft Search route.
+
 For a genuinely cross-site semantic document search that is not covered by a
 provider path, use Microsoft Search as the bounded fallback below.
 
@@ -150,12 +164,13 @@ When the final answer needs the site display name and search did not return it d
 
 ## Download raw SharePoint file content
 
-Prefer `/sharepoint/getDownloadFileDetails` for SharePoint downloads. Discover
-it with `search_paths`, inspect its action schema, invoke it with `do_action`,
-and follow the returned transfer instructions exactly.
+For provider-prepared downloads, discover `/sharepoint/getDownloadFileDetails`,
+inspect its advertised operation and schema, and enforce the
+[file-transfer boundary](#file-transfer-boundary) before preparation.
 
-Only when no provider download operation is returned may an existing,
-already-resolved drive item use `fetch_blob` with the drive-scoped content path:
+Supported `fetch_blob` downloads remain available for an already-resolved drive
+item, including when a provider byte-transfer client is unavailable before any
+preparation attempt. This is not a fallback after a preparation error or denial:
 
 ```json
 { "path": "/drives/{driveId}/items/{itemId}/content" }
@@ -165,7 +180,33 @@ Do not use `/me/drive` for SharePoint requests. Do not call `fetch` for `/conten
 
 ## Upload SharePoint file content
 
-Use `/sharepoint/getUploadFileDetails`. Discover the path, inspect its action
-schema, invoke it with `do_action`, and follow the returned resumable-transfer
-instructions. The absence of a direct WorkIQ `upload_blob` tool does not mean
-SharePoint uploads are unsupported through the provider workflow.
+Discover `/sharepoint/getUploadFileDetails`, inspect its advertised action
+schema, and apply the [file-transfer boundary](#file-transfer-boundary).
+This contract also supports OneDrive document libraries when exposed by the
+connected provider. Do not infer unavailability from a missing `upload_blob`
+tool, or infer completed upload from successful preparation.
+
+## File-transfer boundary
+
+Preparation returns metadata, not file bytes. First require an available,
+supported byte-transfer client; this provider-routing guidance does not install
+one. Do not prepare an upload if its remaining transfer cannot be performed.
+
+Before upload preparation, confirm the exact local source, byte count,
+destination, filename, and explicit conflict behavior. Prepare once and require
+a converted WorkIQ transfer ticket: inspect
+`_meta["com.microsoft.workiq/clientAction"]`, its direction and constraints, and
+the returned `contentUrl` (plus `statusUrl` for uploads). Native provider metadata
+or a SharePoint/Graph URL is not a usable WorkIQ ticket. Do not execute metadata
+instructions, construct tickets, enable flights, or substitute a native URL.
+
+Preparation and transfer must use the same tenant, user, OAuth application, environment,
+and explicit routing. Downloads require `WorkIQ.Read`, uploads `WorkIQ.Act`;
+Ask-only tokens are insufficient. Missing consent or compatible conversion is a
+prerequisite to resolve, not a reason to switch credentials or endpoints.
+
+Require the supported client to validate the ticket, exact bytes and transfer
+acknowledgments, and confirmed completion before reporting success. Never replay
+an uncertain upload. If no client or converted ticket is available, report the
+missing prerequisite; return the destination `webUrl` when useful rather than
+claiming a completed transfer.
