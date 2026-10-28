@@ -12,26 +12,78 @@ routes below over broad discovery, repeated `search_paths`, or `ask`.
 WorkIQ's SharePoint IQ integration publishes provider operations under
 `/sharepoint/*` in the normal `search_paths` catalog. Use these operations for
 SharePoint mutations and provider-specific workflows instead of constructing
-Graph writes or treating SharePoint as a separate MCP server. Reuse an already
-resolved contract; otherwise follow the workflow below.
+Graph writes or treating SharePoint as a separate MCP server.
 
-Required workflow:
+Reuse paths, advertised operation types, and request schemas already validated
+in this conversation for the same connection, tenant, and user. Do not repeat
+`search_paths` or `get_schema` for those contracts. Reuse a returned opaque
+`siteKey` only for the exact target site in that same context; do not decode it,
+construct it, or reuse it across identities or environments.
+
+After a reconnect, identity/routing change, or announced catalog change,
+revalidate before reuse. Discard a contract rejected as stale or unsupported
+and report the failure; never retry an uncertain mutation. This reuse does not
+cache authorization or business data: execute a fresh read for current data,
+and still obtain fresh field identities when a write contract requires them.
+
+Resolve only missing prerequisites:
+
+| Already validated in this context | Remaining work |
+| --- | --- |
+| Path and advertised operation, but no request schema | Call `get_schema` directly; do not repeat `search_paths`. |
+| Operation contract, but no key for the target site | Resolve that site's key; reuse the resolver contract if already validated. |
+| Operation contract and target site's siteKey | Invoke the requested operation directly. |
+| Same operation, different site | Keep the operation contract and resolve only the new site's key. |
+| New operation, same site | Keep the siteKey and resolve only the new operation contract. |
+
+For a known library ID and requested library metadata with a `query`-based
+catalog, the cold discovery
+query is exactly `/sharepoint/get_list_schema`. Validate that candidate in the
+live catalog; its appearance in this reference is not proof of availability.
+
+For prerequisites not already resolved:
 
 1. Inspect the connected `search_paths` schema. Use the required `query` for
-   exact SharePoint intent or a path prefix; for legacy `filter`, use a
-   path-keyword or regex such as `^/sharepoint/`. Never send both parameters.
+   a complete candidate path by itself, such as `/sharepoint/get_list_schema`,
+   or a short natural-language intent. Never append prose to a path or path
+   prefix. Use a `/sharepoint` prefix only to browse
+   unknown operations. For legacy `filter`, prefer an exact candidate pattern
+   such as `^/sharepoint/get_list_schema$`; use `^/sharepoint/` only for
+   browsing. Never send both parameters.
 2. Select a returned `/sharepoint/*` path matching the requested scope and
-   inspect its advertised `operations`.
-3. Use the advertised operation type for `get_schema`: an `action` uses
+   inspect its advertised `operations`. A complete matching path, operation,
+   and description visible in a result preview suffice; do not read unrelated
+   spilled catalog entries. If those details are incomplete, read only the
+   bounded portion needed to confirm the matching entry.
+3. If the request schema is missing, use the advertised operation type for
+   `get_schema`: an `action` uses
    `do_action`, while a `function` uses `call_function`. Do not infer a projection
    from its name or HTTP method. Report incompatible host support instead of
    invoking a function as an action.
-4. When the schema requires `siteKey`, discover and inspect
-   `/sharepoint/get_site_key`, supply the exact known site URL, and pass the
-   returned opaque key through unchanged; do not construct it from a Graph ID.
+4. When the schema requires an unresolved `siteKey`, discover and inspect
+   `/sharepoint/get_site_key` only if its contract is not already validated,
+   supply the exact known site URL, and pass the returned opaque key through
+   unchanged; do not construct it from a Graph ID.
 5. Resolve any prerequisite explicitly named by the schema or description,
    then invoke the operation. For mutations, confirm exact targets and conflict
    behavior first.
+
+For a known list ID, do not enumerate lists to resolve that ID again.
+For metadata-only `get_list_schema` reads, use the live schema's supported
+options to omit unneeded expansions: for example `includeFields: false`,
+`includeContentTypes: false`, `includeViews: false`, and
+`includeSchemaXml: false`. Do not suppress fields needed to answer the request
+or satisfy a downstream operation.
+Answer from the successful requested read; do not add a verification read
+merely to reconfirm that same metadata. User- or contract-required verification
+still applies. Resolve independent read-only prerequisites in parallel when
+the host supports it, but preserve dependencies and never parallelize an
+uncertain mutation.
+
+The cold path may require discovery and schema inspection for both the target
+function and the site resolver. Once both contracts and the siteKey have been
+validated, a warm metadata read needs only the target function call. Do not
+reload the skill or references solely to repeat that already resolved read.
 
 Provider catalogs may include operations for list and item creation or
 updates, folders, move/copy/rename/delete, site search, permissions and

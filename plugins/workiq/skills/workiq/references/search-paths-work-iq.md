@@ -30,7 +30,17 @@ For a returned `/sharepoint/*` path, inspect its advertised `operations` and use
 that operation type for `get_schema`. An `action` uses `do_action`; a `function`
 uses `call_function`. If the schema requires `siteKey`, discover and inspect
 `/sharepoint/get_site_key`, then pass its returned opaque key through unchanged.
-Reuse a resolved contract instead of rediscovering it before every invocation.
+Reuse a path, advertised operation, and request schema already validated in
+this conversation for the same connection, tenant, and user; do not repeat
+`search_paths` or `get_schema` for that contract. Reuse a returned siteKey for
+the exact same site in that context, not across identities or environments.
+Revalidate after a reconnect, identity/routing change, or announced catalog
+change. Contract reuse does not authorize an operation or cache business data.
+If the path and advertised operation are already confirmed but the request
+schema is missing, call `get_schema` directly instead of searching again.
+If only the target site changes, retain the validated operation contract and
+resolve that site's key; if only the operation changes, retain the same site's
+key. See the [provider reuse workflow](sharepoint-work-iq.md#provider-backed-sharepoint-operations).
 
 If the user asks to discover paths AND read or mutate, continue to the mutation tool after picking the path — discovery alone is incomplete.
 
@@ -98,18 +108,33 @@ environments with `fetch` on `/businessapps/environments/`.
 
 ### Find SharePoint provider operations
 
-When the schema requires `query`, use a focused intent or path prefix:
+When the schema requires `query`, use a complete candidate path by itself
+when the intended operation name is known:
+
+```json
+{ "query": "/sharepoint/get_list_schema" }
+```
+
+This example is a discovery candidate, not proof that the connected catalog
+exposes it. Alternatively, use a short natural-language intent:
 
 ```json
 { "query": "SharePoint move files between document libraries" }
 ```
 
-```json
-{ "query": "/sharepoint" }
-```
+Never append prose to a path or path prefix. Reserve
+`{"query":"/sharepoint"}` for browsing unknown operations rather than a known
+operation lookup.
 
 When it requires legacy `filter`, use a path-keyword or regex rather than
-assuming that natural-language SharePoint intent is supported:
+assuming that natural-language SharePoint intent is supported. Prefer an
+exact candidate pattern for a known operation:
+
+```json
+{ "filter": "^/sharepoint/get_list_schema$" }
+```
+
+Reserve broad prefix patterns for browsing unknown operations:
 
 ```json
 { "filter": "^/sharepoint/" }
@@ -118,3 +143,6 @@ assuming that natural-language SharePoint intent is supported:
 Use only returned `/sharepoint/*` paths whose descriptions and operations match
 the requested scope. Search results can be bounded; do not treat a broad prefix
 result as an exhaustive inventory or include unrelated connector paths.
+When a matching entry's complete path, operations, and description are already
+visible in a result preview, do not read unrelated spilled entries. If needed
+details are incomplete, read only the bounded portion containing that entry.
